@@ -57,8 +57,29 @@ wget https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20B
 
 fc-cache
 cd -
+
+# install Github Monaspace fonts
+cd /tmp/
+git clone git@github.com:githubnext/monaspace.git
+mkdir ~/.local/share/fonts/Monaspace
+cp monaspace/fonts/otf/* ~/.local/share/fonts/Monaspace/
+cp monaspace/fonts/frozen/* ~/.local/share/fonts/Monaspace/
+cp monaspace/fonts/variable/* ~/.local/share/fonts/Monaspace/
+rm -rf monaspace
+fc-cache -f
+cd -
+
 ### END ###
 
+# # Luminance (brightness contorller) NOTE: Doesn't work on Ubuntu
+# cd /tmp/
+# wget http://archive.ubuntu.com/ubuntu/pool/universe/d/ddcutil/libddcutil4_1.4.1-1build2_amd64.deb
+# wget https://github.com/sidevesh/Luminance/releases/download/1.1.0/luminance-1.1.0.deb
+# sudo apt install ./libddcutil4_1.4.1-1build2_amd64.deb
+# sudo apt install ./luminance-1.1.0.deb
+# rm libddcutil4_1.4.1-1build2_amd64.deb
+# luminance-1.1.0.deb
+# cd -
 
 # Zsh4humans
 if command -v curl >/dev/null 2>&1; then
@@ -343,6 +364,7 @@ Terminal=false
 Type=Application
 Categories=Development;
 EOF
+
 
 # ### Gnome Settings ###
 # minimize by clicking on the dock
