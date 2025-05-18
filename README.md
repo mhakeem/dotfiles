@@ -3,7 +3,12 @@
 This repo includes a bash script to install applications for development and copy my dot files to any new machine or freshly installed OS (currently Ubuntu)
 
 ## System Requirements
+
 - Ubuntu (24.04, 24.10, 25.05)
+
+## Installation
+
+Run [install.sh](install.sh)
 
 ## Some links for reference
 
@@ -12,8 +17,6 @@ This repo includes a bash script to install applications for development and cop
 - https://www.omgubuntu.co.uk/2025/04/ubuntu-25-04-post-install-tasks
 - https://thelinuxcode.com/40_things_after_installing_ubuntu/
 
-Run [install.sh](install.sh)
-
 ## TODO
-- [] Add .dot files for zsh, vim, tmux, etc
-- [] Include installation for macOS
+- [ ] Add .dot files for zsh, vim, tmux, etc
+- [ ] Include installation for macOS
