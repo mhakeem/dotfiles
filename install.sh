@@ -383,6 +383,12 @@ git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 sudo apt install -y yq
 # copy my tmux config
 cp .tmux.conf ~/
+# Pomodoro app
+cd /tmp/
+wget https://github.com/roldanjr/pomatez/releases/download/v1.7.2/Pomatez-v1.7.2-linux-amd64.deb
+sudo apt install -y ./Pomatez-v1.7.2-linux-amd64.deb
+rm Pomatez-v1.7.2-linux-amd64.deb
+cd -
 
 
 # ### Gnome Settings ###
