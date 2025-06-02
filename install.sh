@@ -1,3 +1,5 @@
+set -e  # Exit on first error
+
 sudo apt update -y && sudo apt upgrade -y
 sudo apt install -y curl gpg wget git unzip ubuntu-restricted-extras
 sudo apt install -y \
