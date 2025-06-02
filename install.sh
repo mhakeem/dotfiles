@@ -413,9 +413,10 @@ cp alacritty.toml ~/.config/alacritty/
 
 # Pomodoro app
 cd /tmp/
-wget https://github.com/roldanjr/pomatez/releases/download/v1.7.2/Pomatez-v1.7.2-linux-amd64.deb
-sudo apt install -y ./Pomatez-v1.7.2-linux-amd64.deb
-rm Pomatez-v1.7.2-linux-amd64.deb
+VERSION=1.7.2
+wget https://github.com/roldanjr/pomatez/releases/download/v${VERSION}/Pomatez-v${VERSION}-linux-amd64.deb
+sudo apt install -y ./Pomatez-v${VERSION}-linux-amd64.deb
+rm Pomatez-v${VERSION}-linux-amd64.deb
 cd -
 
 # global git settings
