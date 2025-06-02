@@ -378,6 +378,11 @@ Terminal=false
 Type=Application
 Categories=Development;
 EOF
+# install tpm (tmux package manager)
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+sudo apt install -y yq
+# copy my tmux config
+cp .tmux.conf ~/
 
 
 # ### Gnome Settings ###
