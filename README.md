@@ -18,5 +18,5 @@ Run [install.sh](install.sh)
 - https://thelinuxcode.com/40_things_after_installing_ubuntu/
 
 ## TODO
-- [ ] Add .dot files for zsh, vim, tmux, etc
+- [x] Add .dot files for zsh, vim, tmux, etc
 - [ ] Include installation for macOS
