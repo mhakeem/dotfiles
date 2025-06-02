@@ -413,3 +413,15 @@ gext install caffeine@patapon.info
 # ### Gnome Settings ###
 # minimize by clicking on the dock
 gsettings set org.gnome.shell.extensions.dash-to-dock click-action 'minimize'
+
+# Compile gsettings schemas in order to be able to set them (needed for Tactile config (below))
+sudo cp ~/.local/share/gnome-shell/extensions/tactile@lundal.io/schemas/org.gnome.shell.extensions.tactile.gschema.xml /usr/share/glib-2.0/schemas/
+
+# Configure Tactile
+gsettings set org.gnome.shell.extensions.tactile col-0 1
+gsettings set org.gnome.shell.extensions.tactile col-1 2
+gsettings set org.gnome.shell.extensions.tactile col-2 1
+gsettings set org.gnome.shell.extensions.tactile col-3 0
+gsettings set org.gnome.shell.extensions.tactile row-0 1
+gsettings set org.gnome.shell.extensions.tactile row-1 1
+gsettings set org.gnome.shell.extensions.tactile gap-size 32
