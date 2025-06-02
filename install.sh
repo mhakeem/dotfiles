@@ -390,6 +390,13 @@ sudo apt install -y ./Pomatez-v1.7.2-linux-amd64.deb
 rm Pomatez-v1.7.2-linux-amd64.deb
 cd -
 
+# global git settings
+# use git gh to set to github email
+git config --global alias.gh 'config user.email "mhakeem@users.noreply.github.com"'
+git config --global user.name "mhakeem"
+git config --global init.defaultBranch main
+
+
 
 # ### Gnome Settings ###
 # minimize by clicking on the dock
