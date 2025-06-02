@@ -89,6 +89,14 @@ else
 fi
 # NTOE: Run `p10k configure`
 
+# zsh4humans plugins install
+git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
+git clone https://github.com/paulirish/git-open.git $ZSH_CUSTOM/plugins/git-open
+# TODO: move this settings after mise installation
+mise use -g usage # must install mise first
+mkdir $ZSH_CUSTOM/plugins/mise/
+mise completion zsh > $ZSH_CUSTOM/plugins/mise/_mise
+
 # fastfecth: Display system information in the terminal
 sudo add-apt-repository -y ppa:zhangsongcui3371/fastfetch
 sudo apt update -y
