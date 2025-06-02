@@ -91,14 +91,6 @@ else
 fi
 # NTOE: Run `p10k configure`
 
-# zsh4humans plugins install
-git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
-git clone https://github.com/paulirish/git-open.git $ZSH_CUSTOM/plugins/git-open
-# TODO: move this settings after mise installation
-mise use -g usage # must install mise first
-mkdir $ZSH_CUSTOM/plugins/mise/
-mise completion zsh > $ZSH_CUSTOM/plugins/mise/_mise
-
 # fastfecth: Display system information in the terminal
 sudo add-apt-repository -y ppa:zhangsongcui3371/fastfetch
 sudo apt update -y
@@ -294,6 +286,17 @@ exec zsh
 mise use --global python@latest
 mise use --global node@lts
 mise use --global ruby@latest
+
+# mise config
+mise settings add idiomatic_version_file_enable_tools ruby,node
+
+# zsh4humans plugins install
+git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
+git clone https://github.com/paulirish/git-open.git $ZSH_CUSTOM/plugins/git-open
+mise use -g usage # must install mise first
+mkdir $ZSH_CUSTOM/plugins/mise/
+mise completion zsh > $ZSH_CUSTOM/plugins/mise/_mise
+
 
 # Spotify
 sudo snap install spotify
