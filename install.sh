@@ -378,11 +378,18 @@ Terminal=false
 Type=Application
 Categories=Development;
 EOF
+
 # install tpm (tmux package manager)
 git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
 sudo apt install -y yq
 # copy my tmux config
 cp .tmux.conf ~/
+
+# copy my zsh config
+cp .my.zsh ~/
+echo "z4h source ~/.my.zsh" >> ~/.zshrc
+exec zsh
+
 # Pomodoro app
 cd /tmp/
 wget https://github.com/roldanjr/pomatez/releases/download/v1.7.2/Pomatez-v1.7.2-linux-amd64.deb
