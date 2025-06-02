@@ -390,6 +390,9 @@ cp .my.zsh ~/
 echo "z4h source ~/.my.zsh" >> ~/.zshrc
 exec zsh
 
+# copy my alacritty config
+cp alacritty.toml ~/.config/alacritty/
+
 # Pomodoro app
 cd /tmp/
 wget https://github.com/roldanjr/pomatez/releases/download/v1.7.2/Pomatez-v1.7.2-linux-amd64.deb
