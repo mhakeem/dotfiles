@@ -396,6 +396,18 @@ git config --global alias.gh 'config user.email "mhakeem@users.noreply.github.co
 git config --global user.name "mhakeem"
 git config --global init.defaultBranch main
 
+# To install gnome extensions via cli
+sudo apt install -y gnome-shell-extension-manager pipx
+pipx install gnome-extensions-cli --system-site-packages
+exec zsh
+
+gext install tactile@lundal.io
+gext install blur-my-shell@aunetx
+gext install space-bar@luchrioh # to replace workspace indicator with space bar
+gext install tophat@fflewddur.github.io # resource monitor viewer
+gext install AlphabeticalAppGrid@stuarthayhurst
+gext install sound-output-device-chooser@kgshank.net
+gext install caffeine@patapon.info
 
 
 # ### Gnome Settings ###
