@@ -338,11 +338,12 @@ sudo apt install -y grub-customizer
 ### AI Apps ###
 # LM Studio
 cd /tmp
-wget https://installers.lmstudio.ai/linux/x64/0.3.15-11/LM-Studio-0.3.15-11-x64.AppImage
-chmod +x ./LM-Studio-0.3.15-11-x64.AppImage
-sudo mkdir /opt/LMStudio
-sudo install ./LM-Studio-0.3.15-11-x64.AppImage /opt/LMStudio/LM-Studio.AppImage
-rm LM-Studio-0.3.15-11-x64.AppImage
+lms_version=0.3.26-6
+wget https://installers.lmstudio.ai/linux/x64/${lms_version}/LM-Studio-${lms_version}-x64.AppImage
+chmod +x ./LM-Studio-${lms_version}-x64.AppImage
+sudo mkdir -p /opt/LMStudio
+sudo install ./LM-Studio-${lms_version}-x64.AppImage /opt/LMStudio/LM-Studio.AppImage
+rm LM-Studio-${lms_version}-x64.AppImage
 cd -
 # Download icon
 sudo wget "https://lmstudio.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2Flmstudio-app-logo.61cb7d80.webp&w=3840&q=75" -O /usr/share/icons/lmstudio.png
