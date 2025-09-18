@@ -379,7 +379,7 @@ cd -
 cd /tmp
 wget -O ChatboxAi.AppImage https://chatboxai.app/install_chatbox/linux
 chmod +x ./ChatboxAi.AppImage
-sudo mkdir /opt/ChatboxAi
+sudo mkdir -p /opt/ChatboxAi
 sudo install ./ChatboxAi.AppImage /opt/ChatboxAi/ChatboxAi.AppImage
 rm ChatboxAi.AppImage
 cd -
