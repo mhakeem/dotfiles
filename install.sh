@@ -221,6 +221,8 @@ wget "https://download.mozilla.org/?product=firefox-devedition-latest-ssl&os=lin
 sudo tar -xf firefox-dev.tar.xz -C /opt/
 rm firefox-dev.tar.xz
 sudo ln -s /opt/firefox/firefox /usr/local/bin/firefox-dev
+# to allow auto updates
+sudo chown -R $USER /opt/firefox
 cd -
 cat > ~/.local/share/applications/firefox-dev.desktop << "EOF"
 [Desktop Entry]
