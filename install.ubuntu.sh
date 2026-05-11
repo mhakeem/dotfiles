@@ -1908,6 +1908,8 @@ register_item() {
 }
 
 # Category display order and labels — edit to add new categories
+# GNOME is intentionally last: extension installs require manual approval
+# in the browser/GNOME Shell prompt, so the user handles it after everything else.
 CATEGORIES=(
   "system:System"
   "terminal:Terminal"
@@ -1916,9 +1918,9 @@ CATEGORIES=(
   "devtools:Dev Tools"
   "launchers:Launchers"
   "apps:Apps"
-  "gnome:GNOME"
   "ai:AI & Local LLMs"
   "gaming:Gaming"
+  "gnome:GNOME"
 )
 
 # ── System ─────────────────────────────────────────────────────────────────────
@@ -2069,6 +2071,11 @@ register_item --key obsidian --cat apps \
   --label "Obsidian (notes)" --default ON \
   --detect 'pkg_installed obsidian || flatpak_installed md.obsidian.Obsidian' \
   --install install_obsidian --remove remove_obsidian
+
+register_item --key dropbox --cat apps \
+  --label "Dropbox (cloud storage + Nautilus integration)" --default ON \
+  --detect 'cmd_exists dropbox || pkg_installed nautilus-dropbox' \
+  --install install_dropbox --remove remove_dropbox
 
 register_item --key 1password --cat apps \
   --label "1Password" --default ON \
@@ -2402,6 +2409,60 @@ remove_obsidian() {
 }
 
 # ── Dev Tools ──────────────────────────────────────────────────────────────────
+install_dropbox() {
+  # Dropbox — official .deb from linux.dropbox.com (Dropbox's own package server).
+  # There is no "latest" alias URL — we scrape the directory listing to find
+  # the newest versioned .deb, same approach Dropbox's own install page uses.
+  # Requires python3-gpg for update signature verification.
+  # On first launch, Dropbox downloads its daemon to ~/.dropbox-dist and prompts
+  # you to sign in — this is expected behaviour.
+  sudo apt-get install -y python3-gpg
+
+  # Find the latest available .deb from Dropbox's package server
+  local latest_deb
+  latest_deb=$(curl -fsSL --connect-timeout 15 --max-time 15 \
+    "https://linux.dropbox.com/packages/ubuntu/" \
+    | grep -oP 'dropbox_[\d.]+_amd64\.deb' \
+    | sort -V | tail -1)
+
+  if [[ -z "$latest_deb" ]]; then
+    log "  WARNING: Could not determine latest Dropbox version — falling back to nautilus-dropbox"
+    sudo apt-get install -y nautilus-dropbox \
+      || log "  WARNING: nautilus-dropbox fallback also failed"
+    return
+  fi
+
+  log "  Downloading Dropbox $latest_deb..."
+  local tmp; tmp=$(mktemp -d)
+  if wget -q --tries=1 --connect-timeout=15 \
+      -O "$tmp/dropbox.deb" \
+      "https://linux.dropbox.com/packages/ubuntu/${latest_deb}"; then
+    sudo apt-get install -y "$tmp/dropbox.deb" \
+      || log "  WARNING: Dropbox .deb install failed — falling back to nautilus-dropbox"
+    if ! command -v dropbox &>/dev/null; then
+      sudo apt-get install -y nautilus-dropbox \
+        || log "  WARNING: nautilus-dropbox fallback also failed"
+    fi
+  else
+    log "  WARNING: Could not download Dropbox .deb — trying nautilus-dropbox"
+    sudo apt-get install -y nautilus-dropbox \
+      || log "  WARNING: nautilus-dropbox install failed"
+  fi
+  rm -rf "$tmp"
+  log "  Dropbox installed. Launch from the app menu to sign in and start syncing."
+  log "  Sync folder: ~/Dropbox"
+}
+
+remove_dropbox() {
+  dropbox stop 2>/dev/null || true
+  sudo apt-get purge -y dropbox nautilus-dropbox || true
+  sudo apt-get autoremove -y
+  # Remove the proprietary daemon downloaded on first launch
+  rm -rf ~/.dropbox-dist 2>/dev/null || true
+  # ~/Dropbox sync folder and ~/.dropbox config preserved deliberately
+  log "  Dropbox removed. Sync folder ~/Dropbox and config ~/.dropbox preserved."
+}
+
 install_flatpak_base() {
   # Sets up Flatpak + Flathub; individual apps are installed via their own items
   sudo apt-get install -y flatpak gnome-software-plugin-flatpak
