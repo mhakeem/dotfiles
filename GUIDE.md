@@ -1,9 +1,9 @@
-# setup.sh — Developer Guide
+# install.sh — Developer Guide
 
 ## Quick Start
 
 ```bash
-bash setup.sh
+bash install.sh
 ```
 
 - Dotfiles (`.tmux.conf`, `alacritty.toml`, `.my.zsh`) must sit beside this script
@@ -32,13 +32,13 @@ tail -f ~/setup.log
 
 **Test a single function manually:**
 ```bash
-source setup.sh          # loads all functions into your shell
+source install.sh          # loads all functions into your shell
 install_brave            # call any install_* function directly
 ```
 
 **Override step timeout (default 300s):**
 ```bash
-STEP_TIMEOUT_SECS=600 bash setup.sh
+STEP_TIMEOUT_SECS=600 bash install.sh
 ```
 
 ---
@@ -192,7 +192,7 @@ The detect expression runs before the tree UI renders — keep it fast (no netwo
 | `$VERSION_ID` | e.g. `"26.04"` or `"42"` | |
 | `$CODENAME` | e.g. `"resolute"` | Ubuntu only |
 | `$FEDORA_VER` | e.g. `"42"` | Fedora only |
-| `$SCRIPT_DIR` | Directory containing `setup.sh` | Where dotfiles live |
+| `$SCRIPT_DIR` | Directory containing `install.sh` | Where dotfiles live |
 | `$LOG_FILE` | `~/setup.log` | |
 
 ---

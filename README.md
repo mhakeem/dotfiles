@@ -4,11 +4,16 @@ This repo includes a bash script to install applications for development and cop
 
 ## System Requirements
 
-- Ubuntu (24.04, 24.10, 25.05)
+- Ubuntu (24.04, 24.10, 25.05, 26.04)
+- Fedora (44)
 
 ## Installation
 
 Run [install.sh](install.sh)
+
+## Guide to add new apps/sources
+
+Read [GUIDE.md](GUIDE.md) to follow the guidelines used to update the script.
 
 ## Some links for reference
 
