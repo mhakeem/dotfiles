@@ -126,13 +126,11 @@ _run_step_impl() {
   trap '_step_abort' INT TERM
 
   if [[ "$mode" == "bg" ]]; then
-    # Run in its own process group (set -m / setsid) so we can kill the tree
-    # setsid not always available; fallback to plain backgrounding
-    if command -v setsid &>/dev/null; then
-      setsid bash -c "$func \"\$@\"" _ "$@" >> "$LOG_FILE" 2>&1 &
-    else
-      "$func" "$@" >> "$LOG_FILE" 2>&1 &
-    fi
+    # Run in a subshell so it inherits all functions from the parent script.
+    # setsid was removed — it spawns a new bash process that cannot see shell
+    # functions defined in the parent, causing "command not found" for every
+    # install_* function. A plain ( subshell ) & inherits the full environment.
+    ( "$func" "$@" ) >> "$LOG_FILE" 2>&1 &
     bg_pid=$!
 
     # Timeout watchdog — kills the job if it runs too long
@@ -1929,6 +1927,11 @@ register_item --key base --cat system \
   --detect 'pkg_installed build-essential && pkg_installed libssl-dev' \
   --install install_base --remove remove_base
 
+register_item --key flatpak --cat system \
+  --label "Flatpak + Flathub (required for app fallbacks)" --default ON \
+  --detect 'cmd_exists flatpak && flatpak remotes | grep -q flathub' \
+  --install install_flatpak_base --remove remove_flatpak_base
+
 register_item --key zsh --cat system --fg \
   --label "Zsh + zsh4humans + Powerlevel10k" --default ON \
   --detect 'pkg_installed zsh && [[ "$(getent passwd "$USER"|cut -d: -f7)" == */zsh ]]' \
@@ -2034,11 +2037,6 @@ register_item --key mise --cat devtools --fg \
   --label "Mise + Python / Node LTS / Ruby" --default ON \
   --detect 'cmd_exists mise || [[ -x ~/.local/bin/mise ]]' \
   --install install_mise --remove remove_mise
-
-register_item --key flatpak --cat devtools \
-  --label "Flatpak + Flathub (base setup)" --default ON \
-  --detect 'cmd_exists flatpak && flatpak remotes | grep -q flathub' \
-  --install install_flatpak_base --remove remove_flatpak_base
 
 # ── Launchers ──────────────────────────────────────────────────────────────────
 register_item --key albert --cat launchers \
