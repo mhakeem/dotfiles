@@ -3,7 +3,7 @@
 # setup.sh — Interactive setup for Ubuntu and Fedora
 # Usage:     bash setup.sh
 #
-# Developer guide (adding apps, repos, debugging): see GUIDE.md
+# Developer guide (adding apps, repos, debugging): see CONTRIBUTING.md
 #
 # NOTES:
 #   - Dotfiles (.tmux.conf, alacritty.toml, .my.zsh) must sit beside this script
@@ -202,7 +202,11 @@ _run_step_impl() {
     kill "$watchdog_pid" 2>/dev/null || true
     wait "$watchdog_pid" 2>/dev/null || true
   else
-    "$func" "$@" >> "$LOG_FILE" 2>&1; exit_code=$?
+    # Foreground — stop spinner first so interactive UIs get a clean terminal.
+    # No stdout/stderr redirection — interactive programs (z4h, whiptail, etc.)
+    # need real TTYs for both. Output goes to terminal only, not the log.
+    stop_spinner
+    "$func" "$@"; exit_code=$?
   fi
 
   trap - INT TERM
@@ -224,7 +228,7 @@ _run_step_impl() {
 run_step()    { _run_step_impl "bg" "$@"; }
 run_step_fg() { _run_step_impl "fg" "$@"; }
 
-ask() { whiptail "$@" 3>&1 1>&2 2>&3; }
+ask() { whiptail "$@" 3>&1 1>&2 2>&3 </dev/tty >/dev/tty; }
 
 # ── Repo helpers ──────────────────────────────────────────────────────────────
 
@@ -457,15 +461,32 @@ install_base() {
       pkg_install curl wget git unzip ca-certificates
       # Multimedia codecs via RPM Fusion
       sudo dnf group install -y multimedia || true
-      # Ruby build deps
-      pkg_install autoconf patch gcc gcc-c++ rustc \
-        openssl-devel libyaml-devel readline-devel \
-        zlib-devel gmp-devel ncurses-devel \
-        libffi-devel libgdbm-devel libuuid-devel \
-        pkgconfig bison clang jemalloc
-      pkg_install libvips ImageMagick-devel mupdf
-      pkg_install redis sqlite sqlite-devel libpq-devel postgresql \
-        community-mysql-devel
+      # Ruby build deps — exact list from https://github.com/rbenv/ruby-build/wiki#fedora
+      # Install individually so one bad package name doesn't fail the whole group
+      local ruby_deps=(autoconf gcc rust patch make bzip2
+        openssl-devel libyaml-devel libffi-devel
+        readline-devel gdbm-devel ncurses-devel perl-FindBin)
+      for p in "${ruby_deps[@]}"; do
+        sudo dnf install -y "$p" 2>/dev/null \
+          || log "  NOTE: $p not available — skipping"
+      done
+      # Fedora 40+ uses zlib-ng-compat-devel; <= 39 uses zlib-devel
+      if version_gte "$FEDORA_VER" "40"; then
+        sudo dnf install -y zlib-ng-compat-devel 2>/dev/null \
+          || sudo dnf install -y zlib-devel 2>/dev/null || true
+      else
+        sudo dnf install -y zlib-devel 2>/dev/null || true
+      fi
+      # Image processing — correct Fedora package names
+      sudo dnf install -y vips-devel ImageMagick 2>/dev/null || true
+      # mupdf not in Fedora repos — skip silently
+      # Database clients
+      sudo dnf install -y redis sqlite libpq postgresql 2>/dev/null || true
+      # sqlite-devel for native gem compilation
+      sudo dnf install -y sqlite-devel libpq-devel 2>/dev/null || true
+      # MySQL — community-mysql-devel is not a real package; use mysql-devel
+      sudo dnf install -y mysql-devel 2>/dev/null \
+        || sudo dnf install -y mariadb-devel 2>/dev/null || true
       pkg_install wl-clipboard xdg-utils
       ;;
   esac
@@ -484,7 +505,7 @@ install_fedora_tweaks() {
     "zram"      "zRAM: switch compression to zstd"            ON \
     "firmware"  "Check + apply firmware updates (fwupdmgr)"   ON \
     "systemd"   "Reduce systemd stop timeout: 90s → 15s"      ON \
-    3>&1 1>&2 2>&3) || return 0
+    3>&1 1>&2 2>&3 </dev/tty >/dev/tty) || return 0
 
   [[ "$choices" == *'"dnf"'* ]] && {
     sudo dnf config-manager setopt fastestmirror=True max_parallel_downloads=10
@@ -530,7 +551,7 @@ install_fedora_tweaks() {
   [[ "$choices" == *'"firmware"'* ]] && {
     sudo fwupdmgr refresh --force 2>/dev/null || true
     sudo fwupdmgr get-updates 2>/dev/null || true
-    sudo fwupdmgr update --no-reboot-check 2>/dev/null || true
+    sudo timeout 600 fwupdmgr update --no-reboot-check 2>/dev/null || true
     log "  Firmware update check complete."
   }
 
@@ -560,12 +581,12 @@ install_ubuntu_tweaks() {
     "systemd"   "Reduce systemd stop timeout: 90s → 15s"      ON \
     "apport"    "Disable apport crash reporting to Canonical"  ON \
     "repos"     "Enable universe + multiverse repositories"    ON \
-    3>&1 1>&2 2>&3) || return 0
+    3>&1 1>&2 2>&3 </dev/tty >/dev/tty) || return 0
 
   [[ "$choices" == *'"firmware"'* ]] && {
     sudo fwupdmgr refresh --force 2>/dev/null || true
     sudo fwupdmgr get-updates 2>/dev/null || true
-    sudo fwupdmgr update --no-reboot-check 2>/dev/null || true
+    sudo timeout 600 fwupdmgr update --no-reboot-check 2>/dev/null || true
     log "  Firmware update check complete."
   }
 
@@ -627,10 +648,46 @@ install_zsh() {
     apt) pkg_install zsh fonts-font-awesome ;;
     dnf) pkg_install zsh fontawesome-fonts ;;
   esac
-  sudo chsh -s "$(which zsh)" "$USER"
-  log "  NOTE: Shell changed to Zsh — log out and back in to activate."
-  sh -c "$(curl -fsSL https://raw.githubusercontent.com/romkatv/zsh4humans/v5/install)" || true
-  log "  NOTE: Run 'p10k configure' after your first Zsh login."
+
+  # Change default shell to zsh
+  if [[ "$(getent passwd "$USER" | cut -d: -f7)" != "$(which zsh)" ]]; then
+    sudo chsh -s "$(which zsh)" "$USER" \
+      || log "  WARNING: Could not change shell — run: chsh -s \$(which zsh)"
+  fi
+
+  # z4h installs itself and then EXECS a new zsh session, which would replace
+  # our script's shell and prevent the rest of the install from running.
+  # Fix: run it in a new terminal window (setsid + bash -c) so it can take
+  # over that shell without affecting ours. We open a new gnome-terminal/xterm
+  # window, run z4h there, and our script continues normally.
+  echo ""
+  echo "  A new terminal window will open for the zsh4humans wizard."
+  echo "  Complete the wizard in that window, then return here."
+  echo ""
+
+  local z4h_cmd='sh -c "$(curl -fsSL https://raw.githubusercontent.com/romkatv/zsh4humans/v5/install)"'
+
+  # Try common terminal emulators in order
+  if command -v ghostty &>/dev/null; then
+    ghostty -e bash -c "$z4h_cmd; echo 'z4h setup complete — close this window'; exec bash" &
+  elif command -v alacritty &>/dev/null; then
+    alacritty -e bash -c "$z4h_cmd; echo 'z4h setup complete — close this window'; exec bash" &
+  elif command -v gnome-terminal &>/dev/null; then
+    gnome-terminal -- bash -c "$z4h_cmd; echo 'z4h setup complete — close this window'; exec bash" &
+  elif command -v xterm &>/dev/null; then
+    xterm -e bash -c "$z4h_cmd; echo 'z4h setup complete — close this window'; exec bash" &
+  else
+    # No terminal emulator found — run inline but warn user
+    echo "  WARNING: No terminal emulator found. Running z4h inline."
+    echo "  The script will resume automatically when z4h is done."
+    bash -c "$z4h_cmd" || true
+    return 0
+  fi
+
+  local term_pid=$!
+  echo "  Waiting for z4h wizard to complete..."
+  echo "  (Complete the wizard in the new window, then close it)"
+  wait "$term_pid" 2>/dev/null || true
 }
 
 remove_zsh() {
@@ -766,9 +823,15 @@ install_alacritty() {
         || log "  WARNING: alacritty not available — try: flatpak install flathub org.alacritty.Alacritty"
       ;;
     dnf)
-      # Alacritty not in Fedora default repos — use Flatpak
-      flatpak install -y --noninteractive flathub org.alacritty.Alacritty 2>/dev/null \
-        || log "  WARNING: Alacritty Flatpak failed on Fedora"
+      # Official Fedora COPR for Alacritty — prebuilt, no cargo compile needed
+      # pschyska/alacritty is the community-standard COPR referenced in Alacritty's own README
+      if sudo dnf install -y alacritty 2>/dev/null; then
+        log "  Alacritty installed via dnf."
+      else
+        sudo dnf copr enable -y pschyska/alacritty 2>/dev/null || true
+        sudo dnf install -y alacritty \
+          || log "  WARNING: Alacritty COPR install failed"
+      fi
       ;;
   esac
   # Theme collection
@@ -790,20 +853,25 @@ remove_alacritty() {
 }
 
 install_zellij() {
-  # Zellij — terminal multiplexer with WebAssembly plugin system
-  # Config file: ~/.config/zellij/config.kdl
   case "$PKG_MGR" in
     apt)
       sudo snap install zellij --classic \
         || log "  WARNING: Zellij snap install failed"
       ;;
     dnf)
-      # Not in Fedora repos — install via cargo (available after mise/rust setup)
-      if command -v cargo &>/dev/null; then
-        cargo install zellij 2>/dev/null \
-          || log "  WARNING: zellij cargo build failed"
+      # Use prebuilt binary from GitHub releases — compiling from source takes
+      # 20-30 min and frequently fails on missing deps
+      local url; url=$(github_latest "zellij-org/zellij" "zellij-x86_64-unknown-linux-musl.tar.gz")
+      if [[ -n "$url" ]]; then
+        local tmp; tmp=$(mktemp -d /tmp/setup-XXXXXX)
+        curl -fsSL --connect-timeout 15 --max-time 120 --location \
+          -o "$tmp/zellij.tar.gz" "$url" \
+          && tar -xf "$tmp/zellij.tar.gz" -C "$tmp" \
+          && sudo install "$tmp/zellij" /usr/local/bin/zellij \
+          || log "  WARNING: Zellij binary install failed"
+        rm -rf "$tmp"
       else
-        log "  NOTE: Zellij requires Rust/cargo. Install mise first then: cargo install zellij"
+        log "  WARNING: Could not resolve Zellij download URL (GitHub rate limit?)"
       fi
       ;;
   esac
@@ -811,7 +879,7 @@ install_zellij() {
 
 remove_zellij() {
   sudo snap remove zellij 2>/dev/null || true
-  command -v cargo &>/dev/null && cargo uninstall zellij 2>/dev/null || true
+  sudo rm -f /usr/local/bin/zellij 2>/dev/null || true
   rm -rf ~/.config/zellij 2>/dev/null || true
   log "  Zellij removed."
 }
@@ -834,11 +902,14 @@ install_ghostty() {
       fi
       ;;
     dnf)
-      # Ghostty is available in Fedora's official repos from F41+
-      pkg_install ghostty 2>/dev/null || {
-        log "  WARNING: ghostty not available in Fedora $FEDORA_VER repos"
-        log "  Try: flatpak install flathub org.ghostty.ghostty"
-      }
+      # Try official Fedora repos first (available from F41+)
+      # Fall back to COPR for versions where it's not in official repos yet
+      if ! sudo dnf install -y ghostty 2>/dev/null; then
+        log "  ghostty not in official repos — trying COPR scottames/ghostty"
+        sudo dnf copr enable -y scottames/ghostty 2>/dev/null || true
+        sudo dnf install -y ghostty \
+          || log "  WARNING: Ghostty install failed — install manually: dnf copr enable scottames/ghostty && dnf install ghostty"
+      fi
       ;;
   esac
 }
@@ -869,21 +940,47 @@ remove_tmux() {
 }
 
 install_lazygit() {
-  local url; url=$(github_latest "jesseduffield/lazygit" "Linux_x86_64.tar.gz")
-  if [[ -n "$url" ]]; then
-    local tmp; tmp=$(mktemp -d)
-    wget -q --tries=1 --connect-timeout=15 -O "$tmp/lg.tar.gz" "$url"
-    tar -xf "$tmp/lg.tar.gz" -C "$tmp" lazygit
-    sudo install "$tmp/lazygit" /usr/local/bin/lazygit
-    mkdir -p ~/.config/lazygit && touch ~/.config/lazygit/config.yml
-    rm -rf "$tmp"
-  else
-    log "  WARNING: Could not resolve LazyGit download URL"
-  fi
+  case "$PKG_MGR" in
+    dnf)
+      # Official Fedora method: COPR repo from https://github.com/jesseduffield/lazygit
+      sudo dnf copr enable -y dejan/lazygit 2>/dev/null || true
+      sudo dnf install -y lazygit \
+        || log "  WARNING: LazyGit COPR install failed"
+      ;;
+    apt)
+      # Ubuntu 25.10+ / Debian Trixie+: lazygit is in the official repos
+      # Earlier releases: download binary from GitHub releases
+      if version_gte "$VERSION_ID" "25.10"; then
+        sudo apt-get install -y lazygit \
+          || log "  WARNING: lazygit apt install failed"
+      else
+        local version arch
+        version=$(curl -fsSL --connect-timeout 15 \
+          "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" \
+          | grep -Po '"tag_name": *"v\K[^"]*') || true
+        if [[ -z "$version" ]]; then
+          log "  WARNING: Could not resolve LazyGit version (GitHub API rate limit?)"
+          return 1
+        fi
+        arch=$(uname -m | sed -e 's/aarch64/arm64/' -e 's/x86_64/x86_64/')
+        local tmp; tmp=$(mktemp -d /tmp/setup-XXXXXX)
+        curl -fsSL --connect-timeout 15 --max-time 60 \
+          -o "$tmp/lazygit.tar.gz" \
+          "https://github.com/jesseduffield/lazygit/releases/download/v${version}/lazygit_${version}_Linux_${arch}.tar.gz"
+        tar -xf "$tmp/lazygit.tar.gz" -C "$tmp" lazygit
+        sudo install "$tmp/lazygit" -D -t /usr/local/bin/
+        rm -rf "$tmp"
+      fi
+      ;;
+  esac
+  mkdir -p ~/.config/lazygit && touch ~/.config/lazygit/config.yml
 }
 
 remove_lazygit() {
-  sudo rm -f /usr/local/bin/lazygit
+  case "$PKG_MGR" in
+    dnf) sudo dnf remove -y lazygit 2>/dev/null || true ;;
+    apt) sudo rm -f /usr/local/bin/lazygit ;;
+  esac
   rm -rf ~/.config/lazygit 2>/dev/null || true
   log "  LazyGit removed."
 }
@@ -1232,7 +1329,7 @@ remove_docker() {
   log "  WARNING: This will remove Docker AND ALL containers, images, volumes."
   if whiptail --title "Remove Docker" \
     --yesno "Remove Docker and ALL containers/images/volumes?\n\nThis CANNOT be undone." \
-    10 62; then
+    10 62 </dev/tty >/dev/tty; then
     sudo systemctl stop docker 2>/dev/null || true
     pkg_remove docker-ce docker-ce-cli containerd.io \
       docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras || true
@@ -1261,6 +1358,7 @@ install_mise() {
       echo 'eval "$(~/.local/bin/mise activate $(basename $SHELL))"' >> "$rc"
   done
   "$mise_bin" exec -- npm install -g tree-sitter-cli 2>/dev/null || true
+  log "  mise installed. Python, Node, and Ruby available."
 }
 
 remove_mise() {
@@ -1451,23 +1549,31 @@ remove_obsidian() {
 }
 
 install_dropbox() {
-  pkg_install python3-gpg 2>/dev/null || pkg_install python3-gpgme 2>/dev/null || true
-  local latest_deb
-  latest_deb=$(curl -fsSL --connect-timeout 15 --max-time 15 \
-    "https://linux.dropbox.com/packages/ubuntu/" \
-    | grep -oP 'dropbox_[\d.]+_amd64\.deb' | sort -V | tail -1)
-  if [[ -n "$latest_deb" ]]; then
-    local tmp; tmp=$(mktemp -d)
-    wget -q --tries=1 --connect-timeout=15 \
-      -O "$tmp/dropbox.deb" \
-      "https://linux.dropbox.com/packages/ubuntu/${latest_deb}" \
-      && pkg_install "$tmp/dropbox.deb" && rm -rf "$tmp" && return 0
-    rm -rf "$tmp"
-  fi
-  # Fallback
   case "$PKG_MGR" in
-    apt) pkg_install nautilus-dropbox || log "  WARNING: Dropbox install failed" ;;
-    dnf) log "  WARNING: No Dropbox RPM available — install manually from dropbox.com/install-linux" ;;
+    apt)
+      # Ubuntu: scrape latest .deb from linux.dropbox.com
+      sudo apt-get install -y python3-gpg 2>/dev/null || true
+      local latest_deb
+      latest_deb=$(curl -fsSL --connect-timeout 15 --max-time 15 \
+        "https://linux.dropbox.com/packages/ubuntu/" \
+        | grep -oP 'dropbox_[\d.]+_amd64\.deb' | sort -V | tail -1)
+      if [[ -n "$latest_deb" ]]; then
+        local tmp; tmp=$(mktemp -d /tmp/setup-XXXXXX)
+        wget -q --tries=1 --connect-timeout=15 \
+          -O "$tmp/dropbox.deb" \
+          "https://linux.dropbox.com/packages/ubuntu/${latest_deb}" \
+          && pkg_install "$tmp/dropbox.deb" && rm -rf "$tmp" && return 0
+        rm -rf "$tmp"
+      fi
+      pkg_install nautilus-dropbox \
+        || log "  WARNING: Dropbox apt install failed"
+      ;;
+    dnf)
+      # Fedora: no official RPM — use Flatpak
+      flatpak remote-modify --no-filter --enable flathub 2>/dev/null || true
+      flatpak install -y --noninteractive flathub com.dropbox.Client 2>/dev/null \
+        || log "  WARNING: Dropbox Flatpak failed — install manually from dropbox.com/install-linux"
+      ;;
   esac
   log "  Dropbox installed. Launch from the app menu to sign in."
 }
@@ -1509,26 +1615,28 @@ install_localsend() {
     apt)
       local url; url=$(github_latest "localsend/localsend" "linux-x86-64.deb")
       if [[ -n "$url" ]]; then
-        local tmp; tmp=$(mktemp -d)
-        wget -q --tries=1 --connect-timeout=15 -O "$tmp/localsend.deb" "$url"
-        pkg_install "$tmp/localsend.deb" || log "  WARNING: LocalSend install failed"
+        local tmp; tmp=$(mktemp -d /tmp/setup-XXXXXX)
+        wget -q --tries=1 --connect-timeout=15 -O "$tmp/localsend.deb" "$url" \
+          && pkg_install "$tmp/localsend.deb" \
+          || log "  WARNING: LocalSend install failed"
         rm -rf "$tmp"
+      else
+        log "  WARNING: Could not resolve LocalSend download URL (GitHub rate limit?)"
       fi
       ;;
     dnf)
-      local url; url=$(github_latest "localsend/localsend" "x86-64.rpm")
-      if [[ -n "$url" ]]; then
-        local tmp; tmp=$(mktemp -d)
-        wget -q --tries=1 --connect-timeout=15 -O "$tmp/localsend.rpm" "$url"
-        sudo dnf install -y "$tmp/localsend.rpm" || log "  WARNING: LocalSend install failed"
-        rm -rf "$tmp"
-      fi
+      # Flatpak is the recommended method on Fedora
+      flatpak remote-modify --no-filter --enable flathub 2>/dev/null || true
+      flatpak install -y --noninteractive flathub org.localsend.localsend_app \
+        || log "  WARNING: LocalSend Flatpak install failed"
       ;;
   esac
 }
 
 remove_localsend() {
-  pkg_remove localsend || true; log "  LocalSend removed."
+  pkg_remove localsend 2>/dev/null || true
+  flatpak uninstall -y --noninteractive org.localsend.localsend_app 2>/dev/null || true
+  log "  LocalSend removed."
 }
 
 install_pomodoro() {
@@ -1661,33 +1769,19 @@ remove_lmstudio() {
 install_jan() {
   case "$PKG_MGR" in
     apt)
-      local url; url=$(github_latest "janhq/jan" "_amd64.deb")
-      [[ -n "$url" ]] && { local tmp; tmp=$(mktemp -d)
-        wget -q --tries=1 --connect-timeout=15 -O "$tmp/jan.deb" "$url"
-        pkg_install "$tmp/jan.deb"; rm -rf "$tmp"; } \
-        || log "  WARNING: Could not resolve Jan.ai .deb URL"
+      local tmp; tmp=$(mktemp -d /tmp/setup-XXXXXX)
+      if curl -fsSL --connect-timeout 15 --max-time 120 --location \
+          -o "$tmp/jan.deb" \
+          "https://github.com/menloresearch/jan/releases/latest/download/jan-linux-amd64.deb"; then
+        pkg_install "$tmp/jan.deb" \
+          || log "  WARNING: Jan.ai .deb install failed"
+      else
+        log "  WARNING: Jan.ai .deb download failed"
+      fi
+      rm -rf "$tmp"
       ;;
     dnf)
-      # No .rpm — use AppImage
-      local url; url=$(github_latest "janhq/jan" "linux-x86_64.AppImage")
-      if [[ -n "$url" ]]; then
-        pkg_install fuse fuse-libs || true
-        local tmp; tmp=$(mktemp -d)
-        wget -q --tries=1 --connect-timeout=15 -O "$tmp/Jan.AppImage" "$url"
-        sudo mkdir -p /opt/Jan
-        sudo install "$tmp/Jan.AppImage" /opt/Jan/Jan.AppImage
-        mkdir -p ~/.local/share/applications
-        cat > ~/.local/share/applications/jan.desktop << 'EOF'
-[Desktop Entry]
-Name=Jan
-Exec=/opt/Jan/Jan.AppImage --no-sandbox
-Icon=jan
-Type=Application
-Terminal=false
-Categories=Development;ArtificialIntelligence;
-EOF
-        rm -rf "$tmp"
-      fi
+      log "  NOTE: Jan.ai is not supported on Fedora — use LM Studio or Chatbox instead."
       ;;
   esac
 }
@@ -1785,7 +1879,7 @@ remove_nvidia() {
   log "    Then reboot."
   whiptail --title "NVIDIA — Manual Removal Required" \
     --msgbox "NVIDIA driver removal cannot be automated safely.\n\nSee $LOG_FILE for instructions.\n\nUbuntu: sudo apt purge ~nnvidia && sudo apt autoremove\nFedora: sudo dnf remove akmod-nvidia xorg-x11-drv-nvidia*\n\nThen reboot." \
-    16 66
+    16 66 </dev/tty >/dev/tty
 }
 
 install_gaming_stack() {
@@ -2222,6 +2316,11 @@ register_item --key base --cat system \
   --detect 'pkg_installed build-essential || pkg_installed gcc' \
   --install install_base --remove remove_base
 
+register_item --key mise --cat system --fg \
+  --label "Mise + Python / Node LTS / Ruby" --default ON \
+  --detect 'cmd_exists mise || [[ -x ~/.local/bin/mise ]]' \
+  --install install_mise --remove remove_mise
+
 register_item --key flatpak --cat system \
   --label "Flatpak + Flathub (required for app fallbacks)" --default ON \
   --detect 'cmd_exists flatpak && flatpak remotes 2>/dev/null | grep -q flathub' \
@@ -2349,11 +2448,6 @@ register_item --key docker --cat devtools \
   --detect 'cmd_exists docker' \
   --install install_docker --remove remove_docker
 
-register_item --key mise --cat devtools --fg \
-  --label "Mise + Python / Node LTS / Ruby" --default ON \
-  --detect 'cmd_exists mise || [[ -x ~/.local/bin/mise ]]' \
-  --install install_mise --remove remove_mise
-
 # ── Launchers ──────────────────────────────────────────────────────────────────
 register_item --key albert --cat launchers \
   --label "Albert launcher" --default ON \
@@ -2423,7 +2517,7 @@ register_item --key lmstudio --cat ai \
   --install install_lmstudio --remove remove_lmstudio
 
 register_item --key jan --cat ai \
-  --label "Jan.ai (local AI GUI)" --default OFF \
+  --label "Jan.ai local AI (Ubuntu only)" --default OFF \
   --detect 'pkg_installed jan || [[ -x /opt/Jan/Jan.AppImage ]]' \
   --install install_jan --remove remove_jan
 
@@ -2626,11 +2720,12 @@ dispatch() {
     local timeout="${STEP_TIMEOUT_SECS:-300}"
     case "$item" in
       edge)           timeout=180 ;;
-      claude_desktop) timeout=180 ;;  # postinstall can phone home; kill at 3 min
+      claude_desktop) timeout=180 ;;
       gaming_stack)   timeout=600 ;;
       wine_stack)     timeout=600 ;;
       gaming_extras)  timeout=600 ;;
       base)           timeout=600 ;;
+      mise)           timeout=600 ;;
       lmstudio)       timeout=300 ;;
     esac
 
@@ -2741,7 +2836,7 @@ main() {
   fi
   whiptail --title "Done — ${DISTRO^} Setup" \
     --msgbox "${msg}\n\nLog: $LOG_FILE\n\nReminder: log out and back in if shell or docker group changed." \
-    20 70
+       20 70 </dev/tty >/dev/tty
 }
 
 main "$@"
