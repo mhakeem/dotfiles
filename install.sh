@@ -3,14 +3,26 @@
 # setup.sh — Interactive setup for Ubuntu and Fedora
 # Usage:     bash setup.sh
 #
+# Developer guide (adding apps, repos, debugging): see GUIDE.md
+#
 # NOTES:
-#   - No step is irreversible; re-running is safe (installs are idempotent)
-#   - Failures are non-fatal: collected and shown in a summary at the end
-#   - Full timestamped log written to ~/setup.log
 #   - Dotfiles (.tmux.conf, alacritty.toml, .my.zsh) must sit beside this script
+#   - Log file: ~/setup.log
+#   - Re-running is safe — all installs are idempotent
+#   - Failures are non-fatal: collected and shown in a summary at the end
 #   - Arch Linux support: planned, not yet implemented
+#
+# DEBUGGING:
+#   Last run failures:
+#     awk '/RUN STARTED/{buf=""} {buf=buf"\n"$0} END{print buf}' ~/setup.log \
+#       | grep -E "FAILED|TIMEOUT|WARNING"
+#   Watch live:
+#     tail -f ~/setup.log
+#   Test a single function:
+#     source setup.sh && install_brave
 # =============================================================================
 set -uo pipefail   # intentionally no -e; errors handled per-step via run_step()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Globals
@@ -458,6 +470,134 @@ install_base() {
       ;;
   esac
 }
+
+install_fedora_tweaks() {
+  # Present each tweak individually so the user can pick what they want
+  local choices
+  choices=$(whiptail --title "Fedora Tweaks" --checklist \
+    "Select tweaks to apply:" 22 72 10 \
+    "dnf"       "DNF: fastestmirror + 10 parallel downloads"  ON \
+    "flathub"   "Flathub: remove content filter"              ON \
+    "openh264"  "Enable Cisco OpenH264 codec (Firefox H.264)" ON \
+    "ffmpeg"    "Swap ffmpeg-free → full FFmpeg (RPM Fusion)"  ON \
+    "fstrim"    "Enable weekly fstrim timer (SSD health)"      ON \
+    "zram"      "zRAM: switch compression to zstd"            ON \
+    "firmware"  "Check + apply firmware updates (fwupdmgr)"   ON \
+    "systemd"   "Reduce systemd stop timeout: 90s → 15s"      ON \
+    3>&1 1>&2 2>&3) || return 0
+
+  [[ "$choices" == *'"dnf"'* ]] && {
+    sudo dnf config-manager setopt fastestmirror=True max_parallel_downloads=10
+    log "  DNF: fastestmirror and parallel downloads enabled."
+  }
+
+  [[ "$choices" == *'"flathub"'* ]] && {
+    flatpak remote-modify --no-filter --enable flathub 2>/dev/null || true
+    log "  Flathub: content filter removed."
+  }
+
+  [[ "$choices" == *'"openh264"'* ]] && {
+    sudo dnf config-manager setopt fedora-cisco-openh264.enabled=1
+    sudo dnf install -y openh264 gstreamer1-plugin-openh264 mozilla-openh264 2>/dev/null || true
+    log "  Cisco OpenH264 enabled."
+  }
+
+  [[ "$choices" == *'"ffmpeg"'* ]] && {
+    sudo dnf swap -y ffmpeg-free ffmpeg --allowerasing 2>/dev/null || true
+    sudo dnf groupupdate -y multimedia \
+      --setop="install_weak_deps=False" \
+      --exclude=PackageKit-gstreamer-plugin 2>/dev/null || true
+    sudo dnf groupupdate -y sound-and-video 2>/dev/null || true
+    log "  Full FFmpeg installed."
+  }
+
+  [[ "$choices" == *'"fstrim"'* ]] && {
+    sudo systemctl enable --now fstrim.timer
+    log "  fstrim timer enabled (weekly SSD TRIM)."
+  }
+
+  [[ "$choices" == *'"zram"'* ]] && {
+    local zram_conf="/usr/lib/systemd/zram-generator.conf"
+    if [[ -f "$zram_conf" ]]; then
+      sudo sed -i '/^compression-algorithm/d' "$zram_conf"
+      echo "compression-algorithm = zstd" | sudo tee -a "$zram_conf" > /dev/null
+      log "  zRAM compression switched to zstd."
+    else
+      log "  WARNING: zram-generator.conf not found — skipping zRAM tweak."
+    fi
+  }
+
+  [[ "$choices" == *'"firmware"'* ]] && {
+    sudo fwupdmgr refresh --force 2>/dev/null || true
+    sudo fwupdmgr get-updates 2>/dev/null || true
+    sudo fwupdmgr update --no-reboot-check 2>/dev/null || true
+    log "  Firmware update check complete."
+  }
+
+  [[ "$choices" == *'"systemd"'* ]] && {
+    sudo sed -i 's/^#*DefaultTimeoutStopSec=.*/DefaultTimeoutStopSec=15s/' \
+      /etc/systemd/system.conf
+    sudo systemctl daemon-reexec 2>/dev/null || true
+    log "  systemd stop timeout reduced to 15s."
+  }
+}
+
+remove_fedora_tweaks() {
+  # Restore DNF defaults
+  sudo dnf config-manager setopt fastestmirror=False max_parallel_downloads=3 2>/dev/null || true
+  # Restore systemd timeout
+  sudo sed -i 's/^DefaultTimeoutStopSec=.*/# DefaultTimeoutStopSec=90s/' \
+    /etc/systemd/system.conf 2>/dev/null || true
+  sudo systemctl daemon-reexec 2>/dev/null || true
+  log "  Fedora tweaks removed."
+}
+
+install_ubuntu_tweaks() {
+  local choices
+  choices=$(whiptail --title "Ubuntu Tweaks" --checklist \
+    "Select tweaks to apply:" 18 72 6 \
+    "firmware"  "Check + apply firmware updates (fwupdmgr)"   ON \
+    "systemd"   "Reduce systemd stop timeout: 90s → 15s"      ON \
+    "apport"    "Disable apport crash reporting to Canonical"  ON \
+    "repos"     "Enable universe + multiverse repositories"    ON \
+    3>&1 1>&2 2>&3) || return 0
+
+  [[ "$choices" == *'"firmware"'* ]] && {
+    sudo fwupdmgr refresh --force 2>/dev/null || true
+    sudo fwupdmgr get-updates 2>/dev/null || true
+    sudo fwupdmgr update --no-reboot-check 2>/dev/null || true
+    log "  Firmware update check complete."
+  }
+
+  [[ "$choices" == *'"systemd"'* ]] && {
+    sudo sed -i 's/^#*DefaultTimeoutStopSec=.*/DefaultTimeoutStopSec=15s/' \
+      /etc/systemd/system.conf
+    sudo systemctl daemon-reexec 2>/dev/null || true
+    log "  systemd stop timeout reduced to 15s."
+  }
+
+  [[ "$choices" == *'"apport"'* ]] && {
+    sudo sed -i 's/^enabled=1/enabled=0/' /etc/default/apport 2>/dev/null || true
+    sudo systemctl disable --now apport 2>/dev/null || true
+    log "  apport crash reporting disabled."
+  }
+
+  [[ "$choices" == *'"repos"'* ]] && {
+    sudo add-apt-repository -y universe 2>/dev/null || true
+    sudo add-apt-repository -y multiverse 2>/dev/null || true
+    sudo apt-get update -y
+    log "  universe + multiverse repositories enabled."
+  }
+}
+
+remove_ubuntu_tweaks() {
+  sudo sed -i 's/^DefaultTimeoutStopSec=.*/# DefaultTimeoutStopSec=90s/' \
+    /etc/systemd/system.conf 2>/dev/null || true
+  sudo systemctl daemon-reexec 2>/dev/null || true
+  sudo sed -i 's/^enabled=0/enabled=1/' /etc/default/apport 2>/dev/null || true
+  log "  Ubuntu tweaks removed."
+}
+
 
 install_flatpak_base() {
   case "$PKG_MGR" in
@@ -2106,6 +2246,16 @@ register_item --key git --cat system \
   --label "Global git config (name + default branch)" --default ON \
   --detect 'git config --global user.name &>/dev/null' \
   --install configure_git --remove remove_git_config
+
+register_item --key fedora_tweaks --cat system --fg \
+  --label "Fedora tweaks: DNF / FFmpeg / OpenH264 / fstrim / zRAM / firmware" --default ON \
+  --detect '[[ "$DISTRO" != "fedora" ]] || sudo dnf config-manager --info 2>/dev/null | grep -q "fastestmirror = True"' \
+  --install install_fedora_tweaks --remove remove_fedora_tweaks
+
+register_item --key ubuntu_tweaks --cat system --fg \
+  --label "Ubuntu tweaks: firmware / systemd timeout / apport / repos" --default ON \
+  --detect '[[ "$DISTRO" != "ubuntu" ]] || [[ "$(grep -c DefaultTimeoutStopSec=15s /etc/systemd/system.conf 2>/dev/null)" -gt 0 ]]' \
+  --install install_ubuntu_tweaks --remove remove_ubuntu_tweaks
 
 # ── Terminal ───────────────────────────────────────────────────────────────────
 register_item --key terminal --cat terminal \
