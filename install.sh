@@ -302,7 +302,7 @@ apt_add_repo() {
 # even after curl's --max-time fires on a stalled network connection.
 _fetch_key() {
   local url="$1" dest="$2"
-  # Remove stale file from previous failed runs — gpg refuses to overwrite
+  # Remove stale file — gpg refuses to overwrite existing files
   sudo rm -f "$dest"
   local tmp; tmp=$(mktemp /tmp/setup-key-XXXXXX)
   chmod 644 "$tmp"
@@ -312,12 +312,11 @@ _fetch_key() {
   if [[ ! -s "$tmp" ]]; then
     log "  WARNING: Downloaded key is empty: $url"; rm -f "$tmp"; return 1
   fi
-  if file "$tmp" 2>/dev/null | grep -qi "PGP\|GPG"; then
-    sudo cp "$tmp" "$dest" || { rm -f "$tmp"; return 1; }
-  else
+  # Always dearmor — gpg handles both ASCII-armored and binary input correctly.
+  # Never use cp directly: ASCII-armored keys written to trusted.gpg.d/ are
+  # silently ignored by apt with "unsupported filetype" errors.
     sudo gpg --batch --no-tty --dearmor -o "$dest" < "$tmp" \
       || { log "  WARNING: GPG dearmor failed for $url"; rm -f "$tmp"; sudo rm -f "$dest"; return 1; }
-  fi
   rm -f "$tmp"
   [[ -s "$dest" ]] || { sudo rm -f "$dest"; return 1; }
   return 0
