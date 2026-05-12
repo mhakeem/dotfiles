@@ -1763,32 +1763,6 @@ remove_lmstudio() {
   log "  LM Studio removed."
 }
 
-install_jan() {
-  case "$PKG_MGR" in
-    apt)
-      local tmp; tmp=$(mktemp -d /tmp/setup-XXXXXX)
-      if curl -fsSL --connect-timeout 15 --max-time 120 --location \
-          -o "$tmp/jan.deb" \
-          "https://github.com/menloresearch/jan/releases/latest/download/jan-linux-amd64.deb"; then
-        pkg_install "$tmp/jan.deb" \
-          || log "  WARNING: Jan.ai .deb install failed"
-      else
-        log "  WARNING: Jan.ai .deb download failed"
-      fi
-      rm -rf "$tmp"
-      ;;
-    dnf)
-      log "  NOTE: Jan.ai is not supported on Fedora — use LM Studio or Chatbox instead."
-      ;;
-  esac
-}
-
-remove_jan() {
-  pkg_remove jan 2>/dev/null || true
-  sudo rm -f /opt/Jan/Jan.AppImage ~/.local/share/applications/jan.desktop 2>/dev/null || true
-  log "  Jan.ai removed."
-}
-
 install_chatbox() {
   # libfuse for AppImage support
   case "$PKG_MGR" in
@@ -2506,11 +2480,6 @@ register_item --key lmstudio --cat ai \
   --label "LM Studio (local AI GUI)" --default OFF \
   --detect 'pkg_installed lmstudio || [[ -x /opt/LMStudio/LM-Studio.AppImage ]]' \
   --install install_lmstudio --remove remove_lmstudio
-
-register_item --key jan --cat ai \
-  --label "Jan.ai local AI (Ubuntu only)" --default OFF \
-  --detect 'pkg_installed jan || [[ -x /opt/Jan/Jan.AppImage ]]' \
-  --install install_jan --remove remove_jan
 
 register_item --key chatbox --cat ai \
   --label "Chatbox AI (AppImage)" --default OFF \
