@@ -315,8 +315,8 @@ _fetch_key() {
   # Always dearmor — gpg handles both ASCII-armored and binary input correctly.
   # Never use cp directly: ASCII-armored keys written to trusted.gpg.d/ are
   # silently ignored by apt with "unsupported filetype" errors.
-    sudo gpg --batch --no-tty --dearmor -o "$dest" < "$tmp" \
-      || { log "  WARNING: GPG dearmor failed for $url"; rm -f "$tmp"; sudo rm -f "$dest"; return 1; }
+  sudo gpg --batch --no-tty --dearmor -o "$dest" < "$tmp" \
+    || { log "  WARNING: GPG dearmor failed for $url"; rm -f "$tmp"; sudo rm -f "$dest"; return 1; }
   rm -f "$tmp"
   [[ -s "$dest" ]] || { sudo rm -f "$dest"; return 1; }
   return 0
@@ -2322,11 +2322,6 @@ register_item --key flatpak --cat system \
   --detect 'cmd_exists flatpak && flatpak remotes 2>/dev/null | grep -q flathub' \
   --install install_flatpak_base --remove remove_flatpak_base
 
-register_item --key zsh --cat system --fg \
-  --label "Zsh + zsh4humans + Powerlevel10k" --default ON \
-  --detect 'pkg_installed zsh && [[ "$(getent passwd "$USER"|cut -d: -f7)" == */zsh ]]' \
-  --install install_zsh --remove remove_zsh
-
 register_item --key fonts --cat system \
   --label "Nerd Fonts + iA Writer + Monaspace" --default ON \
   --detect 'fc-list | grep -qi "FiraMono Nerd"' \
@@ -2461,7 +2456,7 @@ register_item --key slack --cat apps \
   --detect 'pkg_installed slack-desktop || snap_installed slack || flatpak_installed com.slack.Slack' \
   --install install_slack --remove remove_slack
 
-register_item --key spotify --cat apps \
+register_item --key spotify --cat apps --fg \
   --label "Spotify" --default ON \
   --detect 'pkg_installed spotify-client || snap_installed spotify || flatpak_installed com.spotify.Client' \
   --install install_spotify --remove remove_spotify
@@ -2553,6 +2548,13 @@ register_item --key gnome_setup --cat gnome \
   --label "GNOME tweaks + extensions + gsettings" --default ON \
   --detect 'pkg_installed gnome-tweaks' \
   --install install_gnome --remove remove_gnome
+
+# zsh runs last — z4h opens a new terminal window which requires a terminal
+# emulator (Alacritty/Ghostty/gnome-terminal) to already be installed
+register_item --key zsh --cat system --fg \
+  --label "Zsh + zsh4humans + Powerlevel10k" --default ON \
+  --detect 'pkg_installed zsh && [[ "$(getent passwd "$USER"|cut -d: -f7)" == */zsh ]]' \
+  --install install_zsh --remove remove_zsh
 
 # =============================================================================
 # TREE UI — identical to setup-ubuntu.sh (button-free, ANSI bold/reverse)
