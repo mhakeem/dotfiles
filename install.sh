@@ -1480,7 +1480,9 @@ install_spotify() {
 
 remove_spotify() {
   pkg_remove spotify-client 2>/dev/null || true
-  sudo rm -f /usr/share/keyrings/spotify.gpg /etc/apt/sources.list.d/spotify.list 2>/dev/null || true
+  sudo rm -f /etc/apt/trusted.gpg.d/spotify.gpg \
+             /usr/share/keyrings/spotify.gpg \
+             /etc/apt/sources.list.d/spotify.list 2>/dev/null || true
   sudo snap remove spotify 2>/dev/null || true
   flatpak uninstall -y --noninteractive com.spotify.Client 2>/dev/null || true
   log "  Spotify removed."
