@@ -2024,14 +2024,13 @@ install_gaming_extras() {
       pkg_install scx-scheds || log "  WARNING: scx-scheds install failed on Fedora"
       ;;
   esac
-  # vkBasalt, MangoHud — install with explicit stable branch to avoid the
-  # "which runtime version?" interactive prompt that blocks unattended installs
+  # vkBasalt, MangoHud — pin to current 25.08 runtime to avoid end-of-life warnings
   flatpak install -y --noninteractive flathub \
-    runtime/org.freedesktop.Platform.VulkanLayer.vkBasalt/x86_64/stable 2>/dev/null \
+    runtime/org.freedesktop.Platform.VulkanLayer.vkBasalt/x86_64/25.08 2>/dev/null \
     || flatpak install -y --noninteractive flathub \
        org.freedesktop.Platform.VulkanLayer.vkBasalt 2>/dev/null || true
   flatpak install -y --noninteractive flathub \
-    runtime/org.freedesktop.Platform.VulkanLayer.MangoHud/x86_64/stable 2>/dev/null \
+    runtime/org.freedesktop.Platform.VulkanLayer.MangoHud/x86_64/25.08 2>/dev/null \
     || flatpak install -y --noninteractive flathub \
        org.freedesktop.Platform.VulkanLayer.MangoHud 2>/dev/null || true
   # GOverlay, OpenRGB, AntiMicroX — these don't have the runtime picker issue
