@@ -1450,34 +1450,30 @@ remove_slack() {
 install_spotify() {
   case "$PKG_MGR" in
     apt)
-      if _fetch_key \
-          "https://download.spotify.com/debian/pubkey_6224F9941A8AA6D1.gpg" \
-          /usr/share/keyrings/spotify.gpg 2>/dev/null; then
-        # apt runs as _apt user — key must be world-readable
-        sudo chmod 644 /usr/share/keyrings/spotify.gpg
-        echo "deb [signed-by=/usr/share/keyrings/spotify.gpg] https://repository.spotify.com stable non-free" \
-          | sudo tee /etc/apt/sources.list.d/spotify.list > /dev/null
-        if sudo apt-get update \
-            -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/spotify.list" \
-            -o Dir::Etc::sourcelistd="" \
-            -o APT::Get::List-Cleanup="0" -y 2>/dev/null \
-            && pkg_install spotify-client; then
-          return 0
-        else
-          # Clean up broken repo so it doesn't poison future apt updates
-          sudo rm -f /usr/share/keyrings/spotify.gpg \
-            /etc/apt/sources.list.d/spotify.list
-          log "  Spotify apt repo failed — trying snap"
-        fi
-      fi
-      sudo snap install spotify 2>/dev/null && return 0 || true
-      flatpak install -y --noninteractive flathub com.spotify.Client 2>/dev/null || \
-        log "  WARNING: All Spotify install methods failed"
+      # Official method from https://www.spotify.com/download/linux/
+      # Uses --yes on gpg (non-blocking) and trusted.gpg.d/ as the key destination
+      # This function is --fg so curl|gpg pipe has a real stdin
+      curl -sS https://download.spotify.com/debian/pubkey_5384CE82BA52C83A.asc \
+        | sudo gpg --dearmor --yes -o /etc/apt/trusted.gpg.d/spotify.gpg \
+        || { log "  Spotify GPG key failed — trying snap fallback"; \
+             sudo snap install spotify 2>/dev/null && return 0 || true
+             log "  WARNING: All Spotify install methods failed"; return 1; }
+      echo "deb https://repository.spotify.com stable non-free" \
+        | sudo tee /etc/apt/sources.list.d/spotify.list > /dev/null
+      sudo apt-get update \
+        -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/spotify.list" \
+        -o Dir::Etc::sourcelistd="" \
+        -o APT::Get::List-Cleanup="0" -y 2>/dev/null || true
+      pkg_install spotify-client \
+        || { sudo rm -f /etc/apt/trusted.gpg.d/spotify.gpg \
+                        /etc/apt/sources.list.d/spotify.list
+             log "  Spotify apt failed — trying snap"
+             sudo snap install spotify 2>/dev/null \
+               || log "  WARNING: All Spotify install methods failed"; }
       ;;
     dnf)
-      # Snap not available on Fedora — Flatpak
-      flatpak install -y --noninteractive flathub com.spotify.Client 2>/dev/null || \
-        log "  WARNING: Spotify Flatpak failed on Fedora"
+      flatpak install -y --noninteractive flathub com.spotify.Client 2>/dev/null \
+        || log "  WARNING: Spotify Flatpak failed on Fedora"
       ;;
   esac
 }
