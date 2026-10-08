@@ -1,0 +1,14 @@
+font-family = "0xProto Nerd Font Mono"
+font-size = 14
+bold-is-bright = true
+freetype-load-flags = no-force-autohint
+font-thicken = true
+font-thicken-strength = 100
+theme = TokyoNight Night
+window-padding-x = 10
+window-padding-y = 10
+
+# always copy to the section and the system clipboard
+copy-on-select = clipboard
+clipboard-read = allow
+clipboard-write = allow
