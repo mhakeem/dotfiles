@@ -6,10 +6,11 @@ This repo includes a bash script to install applications for development and cop
 
 - Ubuntu (24.04, 24.10, 25.05, 26.04)
 - Fedora (44)
+- macOS (Apple Silicon + Intel, Sequoia 15+)
 
 ## Installation
 
-Run [install.sh](install.sh)
+Run [install.sh](install.sh) on Linux, [install.mac.sh](install.mac.sh) on macOS
 
 ## Guide to add new apps/sources
 
@@ -24,4 +25,4 @@ Read [GUIDE.md](GUIDE.md) to follow the guidelines used to update the script.
 
 ## TODO
 - [x] Add .dot files for zsh, vim, tmux, etc
-- [ ] Include installation for macOS
+- [x] Include installation for macOS
