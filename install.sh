@@ -642,6 +642,32 @@ remove_base() {
   log "                                     or: sudo dnf autoremove   (Fedora)"
 }
 
+# Ensure ~/.my.zsh is sourced from ~/.zshrc via z4h. Called by install_zsh
+# AFTER the wizard completes — never from install_dotfiles, which runs before
+# zsh in dispatch order (when z4h doesn't exist yet). Note z4h is a zsh
+# function, not a binary, so presence is checked via ~/.local/share/z4h —
+# `command -v z4h` in bash would always fail, even when z4h is installed.
+ensure_myzsh_sourced() {
+  if [[ ! -f ~/.my.zsh ]]; then
+    log "  NOTE: ~/.my.zsh not present — select 'dotfiles' to copy it."
+    return 0
+  fi
+  if [[ ! -d ~/.local/share/z4h ]]; then
+    log "  NOTE: z4h not installed — open a new zsh, then re-run this step."
+    return 0
+  fi
+  if [[ ! -f ~/.zshrc ]]; then
+    log "  NOTE: ~/.zshrc not found — skipping source line."
+    return 0
+  fi
+  if grep -qxF 'z4h source ~/.my.zsh' ~/.zshrc; then
+    log "  ~/.my.zsh already sourced from ~/.zshrc."
+  else
+    echo 'z4h source ~/.my.zsh' >> ~/.zshrc
+    log "  ~/.my.zsh now sourced from ~/.zshrc."
+  fi
+}
+
 install_zsh() {
   case "$PKG_MGR" in
     apt) pkg_install zsh fonts-font-awesome ;;
@@ -654,11 +680,29 @@ install_zsh() {
       || log "  WARNING: Could not change shell — run: chsh -s \$(which zsh)"
   fi
 
+  # Pre-flight: z4h clones from GitHub, and p10k wants MesloLGS NF present
+  # before the wizard runs (font-blind wizard picks degraded glyphs).
+  if ! command -v git &>/dev/null; then
+    log "  WARNING: git not found — z4h needs it to clone. Install git first."
+    return 1
+  fi
+  if ! fc-list 2>/dev/null | grep -qi "MesloLGS"; then
+    log "  WARNING: MesloLGS NF not installed — p10k wizard may pick wrong glyphs."
+    log "  Install fonts first, or re-run 'p10k configure' afterwards."
+  fi
+
+  # Idempotent: skip the interactive wizard when z4h already exists (matters
+  # for update mode, which re-runs every selected installer).
+  if [[ -d ~/.local/share/z4h ]]; then
+    log "  zsh4humans already installed — skipping wizard."
+    ensure_myzsh_sourced
+    return 0
+  fi
+
   # z4h installs itself and then EXECS a new zsh session, which would replace
   # our script's shell and prevent the rest of the install from running.
-  # Fix: run it in a new terminal window (setsid + bash -c) so it can take
-  # over that shell without affecting ours. We open a new gnome-terminal/xterm
-  # window, run z4h there, and our script continues normally.
+  # Fix: run it in a new terminal window so it can take over that shell
+  # without affecting ours.
   echo ""
   echo "  A new terminal window will open for the zsh4humans wizard."
   echo "  Complete the wizard in that window, then return here."
@@ -676,17 +720,34 @@ install_zsh() {
   elif command -v xterm &>/dev/null; then
     xterm -e bash -c "$z4h_cmd; echo 'z4h setup complete — close this window'; exec bash" &
   else
-    # No terminal emulator found — run inline but warn user
+    # No terminal emulator found — run inline but warn user.
+    # Safe only because zsh is the LAST registry item: even if z4h replaces
+    # this shell, nothing else is left to run.
     echo "  WARNING: No terminal emulator found. Running z4h inline."
     echo "  The script will resume automatically when z4h is done."
     bash -c "$z4h_cmd" || true
+    ensure_myzsh_sourced
     return 0
   fi
 
   local term_pid=$!
   echo "  Waiting for z4h wizard to complete..."
   echo "  (Complete the wizard in the new window, then close it)"
-  wait "$term_pid" 2>/dev/null || true
+  # Bounded wait (30 min): fg steps have no run_step watchdog, so an
+  # abandoned window must not hang the script forever. We never kill the
+  # terminal — just stop waiting and continue.
+  local waited=0
+  while kill -0 "$term_pid" 2>/dev/null && [[ $waited -lt 1800 ]]; do
+    sleep 5
+    waited=$(( waited + 5 ))
+  done
+  if kill -0 "$term_pid" 2>/dev/null; then
+    log "  WARNING: timed out waiting for z4h wizard (30 min) — continuing."
+    log "  Close the wizard window yourself when done."
+  else
+    wait "$term_pid" 2>/dev/null || true
+  fi
+  ensure_myzsh_sourced
 }
 
 remove_zsh() {
@@ -707,6 +768,8 @@ install_fonts() {
     "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Meslo.zip" "ttf"
   install_font "CaskaydiaMono Nerd Font" \
     "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip" "ttf"
+  install_font "0xProto Nerd Font" \
+    "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/0xProto.zip" "ttf"
   local tmp; tmp=$(mktemp -d)
   wget -q --tries=1 --connect-timeout=15 \
     -O "$tmp/ia.zip" "https://github.com/iaolo/iA-Fonts/archive/refs/heads/master.zip" \
@@ -730,7 +793,8 @@ install_fonts() {
 remove_fonts() {
   rm -rf ~/.local/share/fonts/Monaspace 2>/dev/null || true
   find ~/.local/share/fonts \( -name "MesloLGS*" -o -name "iAWriterMono*" \
-    -o -name "FiraMono*" -o -name "JetBrainsMono*" -o -name "CaskaydiaMono*" \) \
+    -o -name "FiraMono*" -o -name "JetBrainsMono*" -o -name "CaskaydiaMono*" \
+    -o -name "0xProto*" \) \
     -delete 2>/dev/null || true
   fc-cache -f
   log "  Fonts removed."
@@ -911,12 +975,17 @@ install_ghostty() {
       fi
       ;;
   esac
+  # Shared ghostty config (same file install.mac.sh uses; XDG path works there too)
+  mkdir -p ~/.config/ghostty
+  [[ -f "$SCRIPT_DIR/config.ghostty" ]] && \
+    cp "$SCRIPT_DIR/config.ghostty" ~/.config/ghostty/config.ghostty
 }
 
 remove_ghostty() {
   pkg_remove ghostty || true
   [[ "$PKG_MGR" == "apt" ]] && \
     sudo add-apt-repository -r -y ppa:mkasberg/ghostty-ubuntu 2>/dev/null || true
+  rm -rf ~/.config/ghostty 2>/dev/null || true
   log "  Ghostty removed."
 }
 
@@ -991,12 +1060,9 @@ install_dotfiles() {
   local missing=()
   if [[ -f "$script_dir/.my.zsh" ]]; then
     cp "$script_dir/.my.zsh" ~/
-    if [[ -f "$HOME/.zshrc" ]] && command -v z4h &>/dev/null; then
-      grep -qxF 'z4h source ~/.my.zsh' ~/.zshrc \
-        || echo 'z4h source ~/.my.zsh' >> ~/.zshrc
-    elif [[ -f "$HOME/.zshrc" ]] && ! command -v z4h &>/dev/null; then
-      log "  NOTE: z4h not found — skipping 'z4h source ~/.my.zsh' in .zshrc"
-    fi
+    # Copy-only: sourcing into .zshrc is owned by install_zsh (post-wizard).
+    # This step runs before zsh in dispatch order, when z4h doesn't exist yet,
+    # so an append here would silently never happen.
   else missing+=(".my.zsh"); fi
   if [[ -f "$script_dir/.tmux.conf" ]]; then
     cp "$script_dir/.tmux.conf" ~/
@@ -2518,6 +2584,11 @@ register_item --key gnome_setup --cat gnome \
   --detect 'pkg_installed gnome-tweaks' \
   --install install_gnome --remove remove_gnome
 
+# ORDER CONSTRAINT — do not reorder without reading install_zsh:
+# zsh stays LAST (wizard needs a terminal window + fonts installed, and its
+# installer execs a shell that would kill the script mid-run), while fonts and
+# dotfiles stay BEFORE it. Sourcing of ~/.my.zsh is owned by install_zsh
+# (ensure_myzsh_sourced, post-wizard) — never by install_dotfiles.
 # zsh runs last — z4h opens a new terminal window which requires a terminal
 # emulator (Alacritty/Ghostty/gnome-terminal) to already be installed
 register_item --key zsh --cat system --fg \

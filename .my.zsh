@@ -31,5 +31,15 @@ alias ls='eza -lh --group-directories-first --icons=auto'
 alias lsa='ls -a'
 alias lt='eza --tree --level=2 --long --icons --git'
 alias lta='lt -a'
-alias ff="fzf --preview 'batcat --style=numbers --color=always {}'"
-alias fd='fdfind'
+# fd-find (Debian/Ubuntu package name) vs fd (native name on macOS + Fedora)
+if command -v fdfind >/dev/null 2>&1; then
+  alias fd='fdfind'
+elif command -v fd >/dev/null 2>&1; then
+  alias fd='fd'
+fi
+# batcat (Debian/Ubuntu) vs bat (native name on macOS + Fedora)
+if command -v batcat >/dev/null 2>&1; then
+  alias ff="fzf --preview 'batcat --style=numbers --color=always {}'"
+elif command -v bat >/dev/null 2>&1; then
+  alias ff="fzf --preview 'bat --style=numbers --color=always {}'"
+fi
