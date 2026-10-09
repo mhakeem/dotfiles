@@ -296,6 +296,33 @@ preflight_mac() {
   log "  brew: $BREW_BIN"
   brew update >/dev/null 2>&1 || log "  WARNING: brew update failed — continuing"
 
+  # Toolchain check (issue #1): Homebrew often needs newer CLT than what's
+  # installed, and would fail mid-install without explanation. Surface
+  # `brew doctor` findings here — before the app tree — and let the user
+  # decide whether to continue.
+  logecho "Checking brew toolchain (brew doctor — may take a minute)..."
+  local doctor_out doctor_warns
+  doctor_out=$(brew doctor 2>&1 || true)
+  echo "$doctor_out" >> "$LOG_FILE"
+  doctor_warns=$(printf '%s\n' "$doctor_out" | grep -i "warning:" || true)
+  if [[ -z "$doctor_warns" ]]; then
+    log "  brew doctor: clean — ready to brew."
+  else
+    echo ""
+    echo "  brew doctor found issues (full output in $LOG_FILE):"
+    echo "$doctor_warns"
+    echo ""
+    echo "  Most common fix: install the newest Command Line Tools, e.g.:"
+    echo "    xcode-select --install   (or: softwareupdate --list)"
+    echo ""
+    local ans
+    read -p "  Continue anyway? [y/N]: " ans </dev/tty
+    case "$ans" in
+      y|Y|yes|YES) log "  User continued despite brew doctor warnings." ;;
+      *) logecho "Aborted by user after brew doctor warnings."; exit 1 ;;
+    esac
+  fi
+
   # Cache sudo credentials once so background cask installs that need a
   # privileged helper don't hang waiting for a password with no TTY.
   sudo -v 2>/dev/null || true
@@ -1443,7 +1470,8 @@ run_tree_ui() {
       local row="${ROWS[$i]}" line
       case "$row" in
         cat:*)
-          local ck="${row#cat:}" clabel="${_CAT_LABELS[$ck]}"
+          local ck="${row#cat:}" clabel
+          clabel="${_CAT_LABELS[$ck]}"
           local nc=0 nt=0 k
           k=0
           while [[ $k -lt ${#_REG_KEYS[@]} ]]; do
